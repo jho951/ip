@@ -1,0 +1,33 @@
+// 전체 프로젝트에 공통 적용 사항
+allprojects {
+    //  모든 프로젝트의 그룹 ID
+    group = 'transfer'
+    // 모든 프로젝트의 버전
+    version = '1.0.0'
+    // 필요한 의존성을 다운로드할 저장소 지정
+    repositories {mavenCentral()}
+}
+
+// 루트 프로젝트를 제외한 모든 하위(서브) 프로젝트에 공통으로 적용할 설정
+subprojects {
+    // 모든 하위 프로젝트 java 플러그인
+    apply plugin: 'java'
+
+    // 하위 프로젝트에서 자바 17 버전을 사용
+    java {
+        // 개발자의 환경에 설치된 자바 버전과 관계없이,
+        // Gradle이 프로젝트에 필요한 정확한 자바 버전을 자동으로 찾아서 빌드
+        // 버전이 설치되어 있지 않으면 자동으로 다운로드
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
