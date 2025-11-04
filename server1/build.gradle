@@ -1,9 +1,11 @@
-plugins {
-    id 'java'
-    id 'war'
-}
+plugins { id 'java' }
 
 dependencies {
-    implementation project(':common')
-    compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0'
+    implementation project(":common")
+
+    implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcatVer}"
+    implementation "org.apache.tomcat.embed:tomcat-embed-jasper:${tomcatVer}"
+    implementation "org.apache.tomcat.embed:tomcat-embed-el:${tomcatVer}"
+    implementation "org.glassfish.web:jakarta.servlet.jsp.jstl:${jstlVer}"
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
 }

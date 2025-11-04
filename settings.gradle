@@ -1,3 +1,2 @@
-rootProject.name = "server-multi"
-
-include(":common", ":server1", ":server2")
+rootProject.name = 'transfer'
+include('common', 'server1', 'server2', 'launcher')

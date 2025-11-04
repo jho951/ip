@@ -1,9 +1,8 @@
-plugins {
-    id 'java'
-    id 'war'
-}
+plugins { id 'java' }
 
 dependencies {
-    implementation project(':common')
-    compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0'
+    implementation project(":common")
+
+    implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcatVer}"
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
 }

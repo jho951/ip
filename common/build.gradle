@@ -1,15 +1,7 @@
-plugins {
-    id 'java'
-}
-
-repositories {
-    mavenCentral()
-}
+plugins { id 'java' }
 
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
-}
-
-test {
-    useJUnitPlatform()
+    testImplementation platform("org.junit:junit-bom:${junitVer}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
 }

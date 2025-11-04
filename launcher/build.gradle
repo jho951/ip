@@ -1,0 +1,13 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+application { mainClass = 'com.Launcher' }
+
+dependencies {
+    implementation project(':common')
+    implementation project(':server1')
+    implementation project(':server2')
+
+    compileOnly "org.apache.tomcat.embed:tomcat-embed-core:${tomcatVer}"
+}
