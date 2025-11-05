@@ -4,5 +4,7 @@ dependencies {
     implementation project(":common")
 
     implementation "org.apache.tomcat.embed:tomcat-embed-core:${tomcatVer}"
+    implementation "org.apache.tomcat.embed:tomcat-embed-jasper:${tomcatVer}"
+    implementation "org.apache.tomcat.embed:tomcat-embed-el:${tomcatVer}"
     compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
 }

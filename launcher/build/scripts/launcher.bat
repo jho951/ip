@@ -70,7 +70,7 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=%APP_HOME%\lib\launcher-1.0.0.jar;%APP_HOME%\lib\server1-1.0.0.jar;%APP_HOME%\lib\server2-1.0.0.jar;%APP_HOME%\lib\common-1.0.0.jar;%APP_HOME%\lib\tomcat-embed-jasper-11.0.12.jar;%APP_HOME%\lib\tomcat-embed-core-11.0.12.jar;%APP_HOME%\lib\tomcat-embed-el-11.0.12.jar;%APP_HOME%\lib\jakarta.servlet.jsp.jstl-3.0.1.jar;%APP_HOME%\lib\tomcat-annotations-api-11.0.12.jar;%APP_HOME%\lib\ecj-3.42.0.jar
+set CLASSPATH=%APP_HOME%\lib\launcher-1.0.0.jar;%APP_HOME%\lib\server1-1.0.0.jar;%APP_HOME%\lib\server2-1.0.0.jar;%APP_HOME%\lib\common-1.0.0.jar;%APP_HOME%\lib\tomcat-embed-jasper-10.1.24.jar;%APP_HOME%\lib\tomcat-embed-core-10.1.24.jar;%APP_HOME%\lib\tomcat-embed-el-10.1.24.jar;%APP_HOME%\lib\jakarta.servlet.jsp.jstl-3.0.1.jar;%APP_HOME%\lib\tomcat-annotations-api-10.1.24.jar;%APP_HOME%\lib\ecj-3.33.0.jar
 
 
 @rem Execute launcher
