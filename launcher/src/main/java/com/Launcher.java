@@ -1,8 +1,8 @@
 package com;
 
-import org.apache.catalina.startup.Tomcat;
-
 import java.net.*;
+
+import org.apache.catalina.startup.Tomcat;
 
 public final class Launcher {
     private Launcher() {}

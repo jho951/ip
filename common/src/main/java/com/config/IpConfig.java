@@ -19,11 +19,9 @@ import java.util.regex.Pattern;
  *  - assertValidRules(...) 로 사전 검증 가능
  */
 public final class IpConfig {
-    // 문자열을 분리하는 정규식 패턴
     private static final Pattern SEP = Pattern.compile("(?:,|\\||\\R|;)+");
 
     private final String mergedRules;
-    // allow-ip 파일 경로
     private final Path allowFile;
 
     public String mergedRules() { return mergedRules; }
@@ -178,44 +176,29 @@ public final class IpConfig {
         String s = ip.trim();
         if (s.isEmpty()) return null;
 
-        // 이미 IPv4
         if (!s.contains(":")) return s;
 
-        // IPv6 루프백 → IPv4 루프백
         if ("::1".equals(s) || "0:0:0:0:0:0:0:1".equalsIgnoreCase(s)) return "127.0.0.1";
 
-        // IPv6-mapped IPv4 (::ffff:a.b.c.d)
         Matcher m = IPV6_MAPPED_V4.matcher(s);
         if (m.matches()) return m.group(1);
 
-        // 그 외 순수 IPv6은 변환 불가
         return null;
     }
 
-    /**
-     * 요청에서 클라이언트 IPv4를 추출.
-     * trustProxyHeaders=true면 X-Forwarded-For / X-Real-IP를 우선 사용.
-     * (프록시가 없으면 false 권장)
-     * @param req
-     * @param trustProxyHeaders
-     * @return
-     */
+
     public static String clientIPv4(HttpServletRequest req, boolean trustProxyHeaders) {
         String ip = null;
-
         if (trustProxyHeaders) {
             String xff = req.getHeader("X-Forwarded-For");
             if (xff != null && !xff.isBlank()) {
-                // "client, proxy1, proxy2" 형태 → 첫 번째 토큰 사용
                 ip = xff.split(",")[0].trim();
             } else {
                 String xri = req.getHeader("X-Real-IP");
                 if (xri != null && !xri.isBlank()) ip = xri.trim();
             }
         }
-
         if (ip == null || ip.isBlank()) ip = req.getRemoteAddr();
-
         String v4 = toIPv4IfPossible(ip);
         return (v4 != null) ? v4 : ip;
     }

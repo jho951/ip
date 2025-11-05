@@ -31,7 +31,6 @@ public class IpGuardFilter implements Filter {
         // 1) IP 추출 + 루프백 IPv6 정규화
         String ip = request.getRemoteAddr();
         if ("::1".equals(ip) || "0:0:0:0:0:0:0:1".equalsIgnoreCase(ip)) ip = "127.0.0.1";
-        // (일반 IPv6은 아래 match에서 자동 불일치 → denied:ip-format-not-supported 로 처리 가능)
 
         // 2) 규칙 로드 (Env + allow-ip.txt 병합)
         IpConfig cfg      = IpConfig.fromEnv();                 // mergedRules 보유

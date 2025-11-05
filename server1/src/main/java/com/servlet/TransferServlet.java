@@ -45,12 +45,12 @@ public class TransferServlet extends HttpServlet {
         req.setAttribute("defaultFilename", "allow-ip.txt");
         req.getRequestDispatcher("/WEB-INF/index.jsp").forward(req, resp);
     }
+
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
         req.setCharacterEncoding("UTF-8");
 
-        // 폴더=서버1 저장용, 파일명=서버2 조회용
         String destFolder = sanitizeName(nvl(req.getParameter("folderName"), "inbox"));
         String fileName   = sanitizeName(nvl(req.getParameter("fileName"), "test.txt"));
 

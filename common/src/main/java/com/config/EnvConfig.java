@@ -172,12 +172,10 @@ public final class EnvConfig {
 
         String home = System.getProperty("user.home");
 
-        // ~, $HOME, ${HOME} → user.home
         s = s.replaceFirst("^~", home);
         s = s.replace("${HOME}", home);
         s = s.replace("$HOME", home);
 
-        // Windows 스타일 %USERPROFILE% / %HOMEPATH% 지원
         String userProfile = System.getenv("USERPROFILE");
         if (userProfile != null && !userProfile.isBlank()) {
             s = s.replace("%USERPROFILE%", userProfile);

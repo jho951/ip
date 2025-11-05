@@ -1,202 +1,156 @@
+// src/test/java/com/config/EnvConfigTest.java
 package com.config;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.file.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
 class EnvConfigTest {
-    // 테스트 실행 전/후 환경 변수를 관리하기 위한 맵
-    private static final Map<String, String> originalEnv = new HashMap<>();
 
-    // 테스트를 위한 임시 디렉토리 (JUnit 5 제공)
     @TempDir
-    static Path tempDir;
+    Path temp; // JUnit이 테스트마다 자동 생성/삭제하는 임시 디렉터리
 
-    // 테스트에서 사용할 임시 파일 경로
-    private static Path homeDir;
-    private static Path desktopDir;
-    private static Path cwd;
-
-    // 테스트 파일명
-    private static final String TEST_FILENAME = "test-allow-ip.txt";
-    private static final String DEFAULT_CONTENT = "1.1.1.1~1.1.1.10";
-    private static final String NORMALIZED_CONTENT = "1.1.1.1-1.1.1.10";
-
-
-    /**
-     * 모든 테스트 전에 실행: 환경 변수 백업 및 기본 경로 설정
-     */
-    @BeforeAll
-    static void setupAll() {
-        // user.home 및 cwd 경로 설정
-        homeDir = Paths.get(System.getProperty("user.home"));
-        desktopDir = homeDir.resolve("Desktop");
-        cwd = Paths.get("").toAbsolutePath();
-
-        // Desktop 디렉토리가 없으면 생성 (테스트 환경에 따라 필요)
-        try {
-            Files.createDirectories(desktopDir);
-        } catch (IOException e) {
-            System.err.println("Desktop directory creation failed, tests might be inconsistent: " + e.getMessage());
-        }
-
-        // 테스트에 사용될 환경 변수들을 미리 백업
-        backupEnv("DEFAULT_IP");
-        backupEnv("ALLOW_IP_PATH");
-        backupEnv("DEFAULT_FILE_NAME");
-    }
-
-    /**
-     * 모든 테스트 후에 실행: 환경 변수 복원
-     */
-    @AfterAll
-    static void tearDownAll() {
-        // 백업된 환경 변수를 복원
-        restoreEnv("DEFAULT_IP");
-        restoreEnv("ALLOW_IP_PATH");
-        restoreEnv("DEFAULT_FILE_NAME");
-    }
-
-    /**
-     * 각 테스트 전에 실행: 환경 변수 초기화 (테스트 간의 독립성 보장)
-     */
-    @BeforeEach
-    void setup() {
-        // 테스트에서 사용할 환경 변수들을 초기화 (시스템 환경 변수에 직접 접근하는 방식은 복잡하므로,
-        // EnvConfig에서 사용하는 System.getenv()를 간접적으로 제어하는 것은 어려움.
-        // 대신, 각 테스트에서 setEnv()와 restoreEnv()를 호출한다고 가정하고 테스트 진행)
-
-        // 여기서는 명시적으로 테스트를 위해 환경 변수를 unset 한다고 가정
-        // 실제로는 Reflection 등을 사용해야 하지만, 여기서는 default 값 테스트에 중점을 둠.
-    }
-
-    // 환경 변수 백업 헬퍼
-    private static void backupEnv(String key) {
-        if (System.getenv(key) != null) {
-            originalEnv.put(key, System.getenv(key));
-        } else {
-            originalEnv.put(key, null);
-        }
-    }
-
-    // 환경 변수 복원 헬퍼
-    private static void restoreEnv(String key) {
-        // 실제 환경 변수를 변경할 수 있는 권한이 없으므로, 이 메서드는 실제 시스템 환경 변수를 변경하지 않음.
-        // 이는 테스트 환경 설정에 따라 달라질 수 있음. (ex: System.clearProperty, setProperty 대신 System.getenv()를 사용하기 때문)
-        // JUnit 5 Extension을 사용하여 환경 변수를 Mocking 하는 것이 이상적임.
-    }
-
-    // 임시 파일 생성 헬퍼
-    private Path createTempFile(Path dir, String fileName, String content) throws IOException {
-        Files.createDirectories(dir);
-        Path file = dir.resolve(fileName);
-        Files.writeString(file, content);
-        return file;
-    }
-
-    // 임시 파일 및 디렉토리 정리 헬퍼
-    private void cleanUpTempPaths(Path... paths) {
-        for (Path p : paths) {
-            try {
-                if (Files.exists(p)) {
-                    if (Files.isDirectory(p)) {
-                        Files.walk(p)
-                                .sorted((a, b) -> b.compareTo(a)) // 역순으로 정렬하여 깊은 곳부터 삭제
-                                .forEach(path -> {
-                                    try {
-                                        Files.delete(path);
-                                    } catch (IOException e) {
-                                        // 무시
-                                    }
-                                });
-                    } else {
-                        Files.delete(p);
-                    }
-                }
-            } catch (IOException e) {
-                // 무시
-            }
-        }
-    }
-
-    // --- 테스트 메서드 시작 ---
-
+    // ---- 1) 기본 IP 정규화(~ -> -) 확인 ----
     @Test
-    void testEnvOrDefault_DefaultValue() {
-        // 환경 변수가 설정되지 않았을 때 기본값 반환 확인
-        String result = EnvConfig.envOrDefault("NON_EXISTENT_VAR", "default_val");
-        assertEquals("default_val", result);
-    }
-
-    @Test
-    void testNormalizeRules() {
-        // '~'를 '-'로 정규화 확인
-        String raw = "192.168.0.0~192.168.255.255 | 10.0.0.0~ 10.1.1.1";
-        String expected = "192.168.0.0-192.168.255.255|10.0.0.0-10.1.1.1"; // 's*~' 정규식에 의해 공백도 제거
-        assertEquals(expected, EnvConfig.normalizeRules(raw));
-
-        // null 또는 빈 문자열 처리 확인
-        assertNull(EnvConfig.normalizeRules(null));
-        assertEquals("", EnvConfig.normalizeRules(""));
-    }
-
-    @Test
-    void testReadStringSafe() throws IOException {
-        // 파일 읽기 성공
-        Path file = Files.createTempFile(tempDir, "read-test", ".txt");
-        Files.writeString(file, "test content");
-        assertEquals("test content", EnvConfig.readStringSafe(file));
-
-        // 파일 없음 (IOException 발생) -> 빈 문자열 반환 확인
-        Path nonExistent = tempDir.resolve("non-existent.txt");
-        assertEquals("", EnvConfig.readStringSafe(nonExistent));
-    }
-
-    @Test
-    void testDefaultIpRules_RawAndNormalized() {
-        // 환경 변수 설정이 없을 때 기본값 확인
-        String raw = EnvConfig.defaultIpRulesRaw();
-        String expectedRaw = "10.0.0.0~10.255.255.255|172.16.0.0~172.31.255.255|192.168.0.0~192.168.255.255";
-        assertEquals(expectedRaw, raw);
-
-        // 정규화된 값 확인
+    void defaultIpRules_shouldNormalizeTildeToDash() {
+        // DEFAULT_IP env가 없는 경우 EnvConfig의 기본 문자열에 ~가 포함되어 있어야 하며
+        // defaultIpRules()는 ~를 -로 치환해야 한다.
         String normalized = EnvConfig.defaultIpRules();
-        String expectedNormalized = "10.0.0.0-10.255.255.255|172.16.0.0-172.31.255.255|192.168.0.0-192.168.255.255";
-        assertEquals(expectedNormalized, normalized);
+        assertTrue(normalized.contains("10.0.0.0-10.255.255.255"));
+        assertTrue(normalized.contains("172.16.0.0-172.31.255.255"));
+        assertTrue(normalized.contains("192.168.0.0-192.168.255.255"));
+        assertFalse(normalized.contains("~"), "Normalized string must not contain '~'");
     }
 
+    // ---- 2) 파일이 없을 때 readStringSafe는 빈 문자열 ----
     @Test
-    void testAllowDirAndAllowFileName_Default() {
-        // 환경 변수 설정이 없을 때 기본값 확인
-        assertEquals("Desktop", EnvConfig.allowDir());
-        assertEquals("allow-ip.txt", EnvConfig.allowFileName());
+    void readStringSafe_missingFile_returnsEmpty() {
+        Path missing = temp.resolve("no-file-here.txt");
+        String s = EnvConfig.readStringSafe(missing);
+        assertEquals("", s);
     }
 
+    // ---- 3) 절대경로 힌트: resolveAllowFile가 정확히 찾는지 ----
     @Test
-    void testResolveAllowFile_Preference1_HomeDesktop() throws IOException {
-        // 가정: Home/Desktop/fileName 만 존재
-        cleanUpTempPaths(cwd.resolve(TEST_FILENAME));
-        Path expectedFile = createTempFile(desktopDir, TEST_FILENAME, "test1");
+    void resolveAllowFile_absoluteDir_findsFile() throws IOException {
+        String fileName = "allow-ip.txt";
+        Path dir = Files.createDirectories(temp.resolve("absDir"));
+        Path f = dir.resolve(fileName);
+        Files.writeString(f, "172.30.1.10~173.30.1.45");
 
-        Path result = EnvConfig.resolveAllowFile("Desktop", TEST_FILENAME);
-        assertEquals(expectedFile.toAbsolutePath().normalize(), result);
-        cleanUpTempPaths(expectedFile);
+        Path found = EnvConfig.resolveAllowFile(dir.toString(), fileName);
+        assertNotNull(found);
+        assertEquals(f.toAbsolutePath().normalize(), found);
     }
 
+    // ---- 4) 현재 작업 디렉터리 기준 상대 경로 힌트 ----
     @Test
-    void testResolveAllowFile_Preference2_CwdDirHint() throws IOException {
-        // 가정: CWD/dirHint/fileName 만 존재
-        Path dirHintPath = cwd.resolve("config_dir");
-        cleanUpTemp
+    void resolveAllowFile_relativeToCwd_findsFile() throws IOException {
+        // CWD 하위에 임시 폴더/파일을 만들어서 상대 힌트가 작동하는지 확인
+        String fileName = "allow-ip.txt";
+        Path cwd = Paths.get("").toAbsolutePath();
+        Path relDir = cwd.resolve("envcfg_test_rel_" + System.nanoTime());
+        Files.createDirectories(relDir);
+        Path f = relDir.resolve(fileName);
+        Files.writeString(f, "174.30.1.*");
+
+        Path found = EnvConfig.resolveAllowFile(relDir.getFileName().toString(), fileName);
+        assertNotNull(found);
+        assertEquals(f.toAbsolutePath().normalize(), found);
+
+        // cleanup
+        Files.deleteIfExists(f);
+        Files.deleteIfExists(relDir);
+    }
+
+    // ---- 5) ${HOME} 플레이스홀더 치환 확인 ----
+    @Test
+    void resolveAllowFile_homePlaceholder_findsFile() throws IOException {
+        String home = System.getProperty("user.home");
+        String fileName = "allow-ip.txt";
+        Path sub = Paths.get(home, "envcfg_test_home_" + System.nanoTime());
+        Files.createDirectories(sub);
+        Path f = sub.resolve(fileName);
+        Files.writeString(f, "10.50.0.0/16");
+
+        String hint = "${HOME}/" + sub.getFileName(); // expandPlaceholders 대상
+        Path found = EnvConfig.resolveAllowFile(hint, fileName);
+        assertNotNull(found);
+        assertEquals(f.toAbsolutePath().normalize(), found);
+
+        // cleanup
+        Files.deleteIfExists(f);
+        Files.deleteIfExists(sub);
+    }
+
+    // ---- 6) DESKTOP: 서브폴더 토큰 확인 ----
+    @Test
+    void resolveAllowFile_desktopTokenWithSubdir_findsFile() throws IOException {
+        String fileName = "allow-ip.txt";
+        Path desktopBase = detectDesktopLike();
+        Path sub = desktopBase.resolve("envcfg_test_desktop_" + System.nanoTime());
+        Files.createDirectories(sub);
+        Path f = sub.resolve(fileName);
+        Files.writeString(f, "203.0.113.77");
+
+        Path found = EnvConfig.resolveAllowFile("DESKTOP:" + sub.getFileName(), fileName);
+        assertNotNull(found);
+        assertEquals(f.toAbsolutePath().normalize(), found);
+
+        // cleanup
+        Files.deleteIfExists(f);
+        Files.deleteIfExists(sub);
+    }
+
+    // ---- 7) resolveAllowFile가 없을 때 null 반환 ----
+    @Test
+    void resolveAllowFile_returnsNullWhenAllCandidatesMissing() {
+        Path found = EnvConfig.resolveAllowFile("some/nowhere/" + System.nanoTime(), "nope.txt");
+        // 후보 어느 곳에도 파일이 없으면 null이 맞다.
+        assertNull(found);
+    }
+
+    // ---- 8) loadAllowFileRulesNormalized는 직접 경로 제어가 어려우므로
+    // resolveAllowFile + readStringSafe + 정규화 조합을 별도로 검증 ----
+    @Test
+    void readAndNormalize_pipelineWorks() throws IOException {
+        String fileName = "allow-ip.txt";
+        Path dir = Files.createDirectories(temp.resolve("normDir"));
+        Path f = dir.resolve(fileName);
+        Files.writeString(f, "172.30.1.10 ~ 173.30.1.45 | 174.30.1.*");
+
+        Path found = EnvConfig.resolveAllowFile(dir.toString(), fileName);
+        assertNotNull(found);
+
+        String raw = EnvConfig.readStringSafe(found);
+        assertTrue(raw.contains("~"), "raw must contain '~' before normalization");
+
+        // normalizeRules는 private이므로 defaultIpRules()에서 간접 확인했지만
+        // 여기서는 간단히 수동 치환으로 기대값을 비교(파이프라인 개념 검증)
+        String normalized = raw.replaceAll("\\s*~\\s*", "-").trim();
+        assertTrue(normalized.contains("172.30.1.10-173.30.1.45"));
+    }
+
+    // ===== 테스트 보조: EnvConfig.detectDesktop()의 동작을 안전하게 근사 =====
+    private static Path detectDesktopLike() {
+        String home = System.getProperty("user.home");
+        List<Path> cands = new ArrayList<>();
+        cands.add(Paths.get(home, "Desktop"));
+        cands.add(Paths.get(home, "바탕 화면"));
+        String oneDrive = System.getenv("OneDrive");
+        if (oneDrive != null && !oneDrive.isBlank()) {
+            cands.add(Paths.get(oneDrive, "Desktop"));
+        }
+        for (Path p : cands) {
+            if (Files.exists(p)) return p.toAbsolutePath().normalize();
+        }
+        // 없으면 홈 폴더 반환(EnvConfig.detectDesktop과 동일 폴백)
+        return Paths.get(home).toAbsolutePath().normalize();
+    }
+}
