@@ -14,21 +14,23 @@ public class FileQueryServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        String folder  = sanitizeName(req.getParameter("folder"));
+        // ✅ 폴더 파라미터는 더 이상 받지 않음 (또는 무시)
+        // String folder  = sanitizeName(req.getParameter("folder"));  // 제거
         String name    = sanitizeName(req.getParameter("name"));
 
-        System.out.println("folder: " + folder);
-        System.out.println("name: " + name);
-
-        // 서버1이 보낸 헤더만 신뢰해서 사용 (요청사항)
+        // 참고용 헤더(차단 X)
         String clientIp = req.getHeader("X-Client-IP");
         String allowed  = req.getHeader("X-Ip-Allowed");
-        boolean ok      = Boolean.parseBoolean(allowed);
 
+        // ✅ optional: S2_SOURCE_FOLDER 환경변수로 루트 하위 고정 소스 폴더 지정 가능 (비워도 됨)
+        String srcSub = System.getenv("S2_SOURCE_FOLDER");
+        Path base = (srcSub != null && !srcSub.isBlank())
+                ? ROOT.resolve(sanitizeName(srcSub)).normalize()
+                : ROOT;
 
-        // 경로 조립 및 이탈 방지
-        Path dir  = ROOT.resolve(folder).normalize();
-        Path file = dir.resolve(name).normalize();
+        Path file = base.resolve(name).normalize();
+
+        // 루트(또는 base) 이탈 방지
         if (!file.startsWith(ROOT)) {
             resp.setStatus(400);
             resp.setContentType("text/plain; charset=UTF-8");
@@ -36,7 +38,6 @@ public class FileQueryServlet extends HttpServlet {
             return;
         }
 
-        // 파일 존재 확인
         if (!Files.isRegularFile(file)) {
             resp.setStatus(404);
             resp.setContentType("text/plain; charset=UTF-8");
@@ -44,23 +45,21 @@ public class FileQueryServlet extends HttpServlet {
             return;
         }
 
-        // 메타 헤더 (참고용)
-        resp.setHeader("X-Client-IP", Objects.toString(clientIp, ""));
-        resp.setHeader("X-Ip-Allowed", String.valueOf(ok));
+        // 메타 (차단 X)
+        resp.setHeader("X-Client-IP-Observed", Objects.toString(clientIp, ""));
+        resp.setHeader("X-Ip-Allowed-Observed", Objects.toString(allowed, ""));
         resp.setHeader("X-File-Path", file.toString());
         resp.setHeader("X-File-Length", String.valueOf(Files.size(file)));
 
-        // 바이너리 전송 (서버1이 바이트/스트림으로 받음)
+        // 바이너리 전송
         resp.setStatus(200);
         resp.setContentType("application/octet-stream");
         resp.setHeader("Content-Disposition", "inline; filename=\"" + name + "\"");
-
         try (OutputStream out = resp.getOutputStream()) {
             Files.copy(file, out);
         }
     }
 
-    // ===== helpers =====
 
     private static Path resolveRoot() {
         String env = System.getenv("S2_FILE_ROOT");

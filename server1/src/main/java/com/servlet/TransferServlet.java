@@ -50,27 +50,32 @@ public class TransferServlet extends HttpServlet {
             throws ServletException, IOException {
         req.setCharacterEncoding("UTF-8");
 
-        String folder = sanitizeName(nvl(req.getParameter("folderName"), "inbox"));
-        String name   = sanitizeName(nvl(req.getParameter("fileName"), "test.txt"));
+        // 폴더=서버1 저장용, 파일명=서버2 조회용
+        String destFolder = sanitizeName(nvl(req.getParameter("folderName"), "inbox"));
+        String fileName   = sanitizeName(nvl(req.getParameter("fileName"), "test.txt"));
 
         String clientIp = IpConfig.clientIPv4(req, false);
         boolean allowed = IpConfig.fromEnv().isAllowed(clientIp);
 
         int s2 = portOf(System.getenv("DEFAULT_SERVER2"), 8082);
-        String qs = "folder=" + enc(folder) + "&name=" + enc(name);
+
+        // ✅ 서버2에는 name만 전달 (folder 제거!)
+        String qs = "name=" + enc(fileName);
         URI uri = URI.create("http://localhost:" + s2 + "/files?" + qs);
 
-        // 저장 루트: ENV S1_SAVE_ROOT 없으면 ~/s1data
-        Path s1root  = Path.of(System.getenv().getOrDefault("S1_SAVE_ROOT",
-                Path.of(System.getProperty("user.home"), "Desktop").toString())).toAbsolutePath().normalize();
-        Path saveDir = s1root.resolve(folder).normalize();
-        Path saveFile= saveDir.resolve(name).normalize();
+        // 저장 루트: S1_SAVE_ROOT (없으면 ~/Desktop)
+        Path s1root  = Path.of(System.getenv().getOrDefault(
+                "S1_SAVE_ROOT", Path.of(System.getProperty("user.home"), "Desktop").toString()
+        )).toAbsolutePath().normalize();
+
+        // ✅ 폴더는 '저장 경로'에만 사용
+        Path saveDir  = s1root.resolve(destFolder).normalize();
+        Path saveFile = saveDir.resolve(fileName).normalize();
 
         String msg;
         int code = 500;
         String err = null;
 
-        // 루트 밖으로 이탈 방지
         if (!saveFile.startsWith(s1root)) {
             msg = "잘못된 경로 요청(루트 이탈): " + saveFile;
             code = 400;
@@ -90,11 +95,12 @@ public class TransferServlet extends HttpServlet {
                          var out = Files.newOutputStream(saveFile,
                                  StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
                         long copied = in.transferTo(out);
-                        msg = String.format("저장 완료: %s (%,d bytes) from server2:%d", saveFile, copied, s2);
+                        msg = String.format("저장 완료: %s (%,d bytes) from server2:%d",
+                                saveFile, copied, s2);
                     }
                 } else {
-                    msg = "server2 응답 코드: " + code;
-                    try (var in = httpRes.body()) { in.readAllBytes(); } // 스트림 소비
+                    byte[] body = httpRes.body().readAllBytes(); // 바디도 로깅해보면 원인 즉시 파악
+                    msg = "server2 응답 코드: " + code + ", body=" + new String(body, java.nio.charset.StandardCharsets.UTF_8);
                 }
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
@@ -107,13 +113,13 @@ public class TransferServlet extends HttpServlet {
         }
 
         req.setAttribute("message",
-                String.format("folder=%s, file=%s, myIp=%s, allowed=%s, s2.status=%d, saved=%s%s",
-                        folder, name, clientIp, allowed, code, saveFile, (err != null ? (", err=" + err) : "")));
-        req.setAttribute("defaultFolder", folder);
-        req.setAttribute("defaultFilename", name);
+                String.format("folder(dest)=%s, file(src)=%s, myIp=%s, allowed=%s, s2.status=%d, saved=%s%s",
+                        destFolder, fileName, clientIp, allowed, code, saveFile,
+                        (err != null ? (", err=" + err) : "")));
+        req.setAttribute("defaultFolder", destFolder);
+        req.setAttribute("defaultFilename", fileName);
         req.getRequestDispatcher("/WEB-INF/index.jsp").forward(req, resp);
     }
-
     private static String sanitizeName(String s) {
         if (s == null) return "";
         s = s.replace("\\", "/");
