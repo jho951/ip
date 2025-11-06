@@ -58,6 +58,10 @@
             font-size: 16px;
             cursor: pointer;
         }
+        pre{
+            padding: 20px 0;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
@@ -66,10 +70,10 @@
 
 <form method="post" action="/transfer">
     <label>폴더명
-        <input name="folderName" value="${defaultFolder}"/>
+        <input name="folderName" value="${defaultFolder}" placeholder="저장할 폴더 명"/>
     </label>
     <label>파일명
-        <input name="fileName" value="${defaultFilename}"/>
+        <input name="fileName" value="${defaultFilename}" placeholder="저장할 파일 명"/>
     </label>
     <button type="submit">서버2 조회</button>
 </form>

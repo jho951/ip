@@ -1,135 +1,132 @@
 package com.config;
 
+import com.constant.ErrorCode;
+import com.exception.AppException;
+
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.regex.Matcher;
+import static com.constant.RegexConst.RULE_ENV;
 
 public final class EnvConfig {
     private EnvConfig() {}
 
+    private static final String DESKTOP_PREFIX = "DESKTOP:";
+
     /**
-     * <h5>환경변수를 확인해 값이 없으면 기본값을 반환합니다.</h5>
-     * @param envKey 환경 변수 키
-     * @param defaultValue 기본값
-     * @return 환경 변수 값 null 또는 빈 값이면 기본값
+     * env 공백 제거
+     * @param envKey env 키
+     * @return 없으면 null, 있으면 공백제거 후 env 값 추출
      */
-    private static String envOrDefault(String envKey, String defaultValue) {
-        String value = System.getenv(envKey);
-        return value == null || value.isBlank() ? defaultValue : value.trim();
+    public static String env(String envKey) {
+        if (envKey == null) return null;
+        String envValue = System.getenv(envKey).trim();
+        return envValue.isEmpty() ? null :envValue;
     }
 
     /**
-     * <h5>IP 범위 구분자를 정규화합니다.</h5>
-     * <p>범위 구분자 <code>~</code>를 <code>-</code>로 치환합니다.</p>
-     * @param ipRange 원본 IP 문자열
-     * @return 정규화된 IP 문자열, null 또는 빈 값이면 그대로 반환
+     * 기본 경로
+     * @return detectDesktop();
      */
-    private static String normalizeRules(String ipRange) {
-       return ipRange == null || ipRange.isBlank()? ipRange: ipRange.replaceAll("\\s*~\\s*", "-").trim();
+    public static Path desktop() {
+        return detectDesktop();
     }
 
     /**
-     * <h5>텍스트 파일 내용을 문자열로 반환합니다.</h5>
+     * 루트 경로 반환
+     * @param envKey 환경설정 키
+     * @param defaultPath 기본 경로
+     * @return root.toAbsolutePath().normalize() 해당 경로 정규화
+     */
+    public static Path rootPath(String envKey, Path defaultPath) {
+        String envValue = env(envKey);
+        Path root = (envValue != null) ? Paths.get(envValue) : detectDesktop();
+        return root.toAbsolutePath().normalize();
+    }
+    
+    /**
+     * IP 범위 구분자 정규화(~ → -)
+     * @param ipRange ip 범위를 물결로 구분한 문자열
+     * @return ipRange || normalizeIpRange 빈문자열이거나 null인 경우 ipRange 있으면 normalizeIpRange
+     */
+    public static String normalizeRules(String ipRange) {
+        String normalizeIpRange =ipRange.replaceAll("\\s*~\\s*", "-").trim();
+        return (ipRange == null || ipRange.isBlank()) ? ipRange : normalizeIpRange;
+    }
+    
+    /**
+     * 텍스트 파일 내용 읽기
      * @param filePath 파일 경로
-     * @return 파일 내용 문자열, 파일이 없거나 읽기 실패 시 빈 문자열
+     * @return 텍스트 파일 내용 문자열
      */
     public static String readStringSafe(Path filePath) {
-        if (filePath == null) return "";
         try {
             return Files.readString(filePath);
         } catch (IOException e) {
-            return "";
+            throw new AppException(ErrorCode.BAD_REQUEST_READ_FILE,"파일 읽기 에러");
         }
     }
 
-    /**
-     * <h5>{@code DEFAULT_IP} 기본 체크 IP를 문자열로 반환합니다.</h5>
-     * @return DEFAULT_IP, 없으면 기본값(RFC1918)
-     */
+    /** DEFAULT_IP 원본 */
     public static String defaultIpRulesRaw() {
-        return envOrDefault("DEFAULT_IP", "10.0.0.0~10.255.255.255|172.16.0.0~172.31.255.255|192.168.0.0~192.168.255.255");
+        return envOrDefault(
+                "DEFAULT_IP",
+                "10.0.0.0~10.255.255.255|172.16.0.0~172.31.255.255|192.168.0.0~192.168.255.255"
+        );
     }
 
-    /**
-     * <h5>{@code DEFAULT_IP} 규칙 문자열을 정규화(~ → -)합니다.</h5>
-     * @return 정규화된 DEFAULT_IP 규칙 문자열
-     */
+    /** DEFAULT_IP 정규화 */
     public static String defaultIpRules() {
         return normalizeRules(defaultIpRulesRaw());
     }
 
-    /**
-     * <h5>{@code ALLOW_IP_PATH} 환경변수를 읽어 규칙 파일의 디렉터리 위치를 반환합니다.</h5>
-     * <p>기본값은 {@code "Desktop"}입니다.</p>
-     * @return 규칙 파일 디렉터리 힌트
-     */
+    /** 규칙 파일 디렉터리 힌트 */
     public static String allowDir() {
         return envOrDefault("ALLOW_IP_PATH", "Desktop");
     }
 
-    /**
-     * <h5>{@code DEFAULT_FILE_NAME} 환경변수를 읽어 규칙 파일명을 반환합니다.</h5>
-     * <p>기본값은 {@code "allow-ip.txt"}입니다.</p>
-     *
-     * @return 규칙 파일명
-     */
+    /** 규칙 파일명 */
     public static String allowFileName() {
         return envOrDefault("DEFAULT_FILE_NAME", "allow-ip.txt");
     }
 
     /**
-     * 허용 IP 규칙 파일의 실제 경로를 탐색합니다.
-     * <p>
-     * dirHint와 fileName을 기반으로 여러 후보 경로를 만들고,
-     * <b>존재하는</b> 첫 번째 경로를 반환합니다. 없으면 {@code null}입니다.
-     * </p>
-     *
-     * <h3>탐색 전략(요약)</h3>
-     * <ul>
-     * <li>dirHint가 "desktop"이면 우선 {@code ${HOME}/Desktop/fileName}</li>
-     * <li>dirHint가 절대경로면 {@code dirHint/fileName}</li>
-     * <li>그 외에는 {@code ${CWD}/dirHint/fileName} → {@code ${HOME}/dirHint/fileName} → {@code ${HOME}/Desktop/fileName}</li>
-     * <li>마지막으로 항상 {@code ${CWD}/fileName}도 확인</li>
-     * </ul>
-     *
-     * @param dirHint 디렉터리 힌트(ALLOW_IP_PATH)
-     * @param fileName 파일명(DEFAULT_FILE_NAME)
-     * @return 존재하는 파일의 절대 경로, 없으면 {@code null}
+     * 허용 IP 규칙 파일의 실제 경로 탐색
+     * (중복 후보 정리: detectDesktop()가 일반 Desktop 포함하므로 별도 Desktop 후보 제거)
      */
     public static Path resolveAllowFile(String dirHint, String fileName) {
         final String home = System.getProperty("user.home");
         final Path cwd = Paths.get("").toAbsolutePath();
 
-        // 순서 유지 + 중복 제거
-        java.util.LinkedHashSet<Path> cands = new java.util.LinkedHashSet<>();
+        LinkedHashSet<Path> cands = new LinkedHashSet<>();
 
-        String hint = dirHint == null ? "" : dirHint.trim();
+        String hint = (dirHint == null) ? "" : dirHint.trim();
         String expanded = expandPlaceholders(hint);
 
-        // 1) 먼저 Home 기반(Desktop 포함) 후보를 넣는다
-        cands.add(detectDesktop().resolve(fileName));      // Desktop (OneDrive/한글 포함 탐지)
-        cands.add(Path.of(home, "Desktop", fileName));     // 일반 Desktop 직결
-        cands.add(Path.of(home).resolve(fileName));        // 홈 바로 아래 (예비)
+        // 1) Desktop(OneDrive/한글 포함 탐지) + HOME 바로 아래
+        cands.add(detectDesktop().resolve(fileName));
+        cands.add(Path.of(home).resolve(fileName));
 
-        // 2) 그 다음 CWD(현재 작업 디렉터리)
+        // 2) CWD
         cands.add(cwd.resolve(fileName));
 
-        // 3) 마지막에 Env 힌트 적용 (절대/상대/토큰 포함)
+        // 3) Env 힌트 적용
         if (!hint.isEmpty()) {
-            if (hint.regionMatches(true, 0, "DESKTOP:", 0, "DESKTOP:".length())) {
-                String sub = hint.substring("DESKTOP:".length()).replaceAll("^[/\\\\]+", "");
+            if (hint.regionMatches(true, 0, DESKTOP_PREFIX, 0, DESKTOP_PREFIX.length())) {
+                String sub = hint.substring(DESKTOP_PREFIX.length()).replaceAll("^[/\\\\]+", "");
                 Path base = sub.isBlank() ? detectDesktop() : detectDesktop().resolve(sub);
                 cands.add(base.resolve(fileName));
-            } else {
-                if (!expanded.isBlank()) {
-                    Path p = Paths.get(expanded);
-                    if (p.isAbsolute()) {
-                        cands.add(p.resolve(fileName));                 // 절대 경로 힌트
-                    } else {
-                        cands.add(cwd.resolve(expanded).resolve(fileName));     // CWD+힌트
-                        cands.add(Path.of(home).resolve(expanded).resolve(fileName)); // HOME+힌트
-                    }
+            } else if (!expanded.isBlank()) {
+                Path p = Paths.get(expanded);
+                if (p.isAbsolute()) {
+                    cands.add(p.resolve(fileName));
+                } else {
+                    cands.add(cwd.resolve(expanded).resolve(fileName));
+                    cands.add(Path.of(home).resolve(expanded).resolve(fileName));
                 }
             }
         }
@@ -144,27 +141,28 @@ public final class EnvConfig {
         return null;
     }
 
-
-    /**
-     * 허용 IP 규칙 파일을 읽어 <b>정규화(~ → -)</b>된 문자열로 반환합니다.
-     * <p>파일이 없거나 읽기 실패 시 빈 문자열을 반환합니다.</p>
-     *
-     * @return 정규화된 규칙 문자열(없으면 빈 문자열)
-     */
+    /** 규칙 파일 로드(+정규화) */
     public static String loadAllowFileRulesNormalized() {
-        Path file = resolveAllowFile(allowDir(), allowFileName());
-        String raw = readStringSafe(file);
+        Path filePath = resolveAllowFile(allowDir(), allowFileName());
+        String raw = readStringSafe(filePath);
         return normalizeRules(raw);
     }
 
-    /**
-     * 실제 사용 중인 허용 IP 규칙 파일의 절대 경로를 반환합니다.
-     *
-     * @return 존재하는 규칙 파일의 절대 경로, 없으면 {@code null}
-     */
+    /** 실제 사용 중 파일 경로 */
     public static Path actualAllowFilePath() {
         return resolveAllowFile(allowDir(), allowFileName());
     }
+
+    /** 합성 규칙: DEFAULT_IP | 파일규칙 */
+    public static String combinedIpRulesNormalized() {
+        String def = defaultIpRules();
+        String file = loadAllowFileRulesNormalized();
+        if (file == null || file.isBlank()) return def;
+        if (def == null || def.isBlank()) return file;
+        return def + "|" + file;
+    }
+
+
 
 
     private static String expandPlaceholders(String s) {
@@ -172,59 +170,77 @@ public final class EnvConfig {
 
         String home = System.getProperty("user.home");
 
-        // ~, $HOME, ${HOME} → user.home
+        // ~, $HOME, ${HOME}
         s = s.replaceFirst("^~", home);
         s = s.replace("${HOME}", home);
         s = s.replace("$HOME", home);
 
-        // Windows 스타일 %USERPROFILE% / %HOMEPATH% 지원
+        // Windows 환경 변수
         String userProfile = System.getenv("USERPROFILE");
         if (userProfile != null && !userProfile.isBlank()) {
             s = s.replace("%USERPROFILE%", userProfile);
         }
         String homePath = System.getenv("HOMEPATH");
-        String homeDrive = System.getenv("HOMEDRIVE"); // 보조
+        String homeDrive = System.getenv("HOMEDRIVE");
         if (homePath != null && !homePath.isBlank() && s.contains("%HOMEPATH%")) {
             String hp = (homeDrive != null ? homeDrive : "") + homePath;
             s = s.replace("%HOMEPATH%", hp);
         }
 
-        // ${VAR} 일반 환경변수 치환 (간단 버전)
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("\\$\\{([A-Za-z0-9_]+)}")
-                .matcher(s);
-        StringBuffer out = new StringBuffer();
+        // ${VAR} 일반 치환
+        Matcher m = RULE_ENV.matcher(s);
+        StringBuilder out = new StringBuilder();
         while (m.find()) {
             String key = m.group(1);
             String val = System.getenv(key);
-            if (val == null) val = ""; // 없으면 빈문자
-            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(val));
+            if (val == null) val = "";
+            m.appendReplacement(out, Matcher.quoteReplacement(val));
         }
         m.appendTail(out);
         return out.toString();
     }
 
+    /** OS/언어/OneDrive를 고려한 Desktop 디렉터리 탐색 */
     private static Path detectDesktop() {
         String home = System.getProperty("user.home");
         List<Path> cands = new ArrayList<>();
-        // 일반 Desktop
-        cands.add(Path.of(home, "Desktop"));
-        // 한국어 윈도우
-        cands.add(Path.of(home, "바탕 화면"));
-        // OneDrive Desktop (회사/학교 계정일 수 있음)
+        cands.add(Path.of(home, "Desktop"));     // 일반 Desktop
+        cands.add(Path.of(home, "바탕 화면"));       // 한국어 Windows
         String oneDrive = System.getenv("OneDrive");
         if (oneDrive != null && !oneDrive.isBlank()) {
-            cands.add(Path.of(oneDrive, "Desktop"));
+            cands.add(Path.of(oneDrive, "Desktop")); // OneDrive Desktop
         }
         for (Path p : cands) {
             try {
                 if (Files.exists(p)) return p.toAbsolutePath().normalize();
             } catch (Exception ignore) {}
         }
-        // 없으면 홈 경로로 폴백(최소한 존재하는 디렉터리)
+        // 없으면 홈 경로로 폴백
         return Path.of(home).toAbsolutePath().normalize();
     }
 
 
+    /** DEFAULT_SERVER1/2가 URL 형태일 때 포트 파싱. 없으면 fallback. */
+    public static int portOf(String envUrl, int fallback) {
+        try {
+            if (envUrl == null || envUrl.isBlank()) return fallback;
+            URI u = URI.create(envUrl.trim());
+            int p = u.getPort();
+            return p > 0 ? p : fallback;
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
 
+
+    /**
+     * env + 기본값 (env() 재사용)
+     * @param envKey 환경설정 키
+     * @param defaultValue 환경설정 값이 없을경우 대체
+     * @return envValue | defaultValue 값이 있으면 envValue 없으면 defaultValue
+     */
+    private static String envOrDefault(String envKey, String defaultValue) {
+        String envValue = env(envKey);
+        return (envValue == null) ? defaultValue : envValue;
+    }
 }

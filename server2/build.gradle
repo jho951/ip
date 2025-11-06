@@ -7,4 +7,8 @@ dependencies {
     implementation "org.apache.tomcat.embed:tomcat-embed-jasper:${tomcatVer}"
     implementation "org.apache.tomcat.embed:tomcat-embed-el:${tomcatVer}"
     compileOnly 'jakarta.servlet:jakarta.servlet-api:6.0.0'
+
+    implementation 'org.slf4j:slf4j-api:2.0.16'
+    implementation 'ch.qos.logback:logback-classic:1.5.12'
+    implementation 'org.slf4j:jul-to-slf4j:2.0.16'
 }

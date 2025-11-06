@@ -8,8 +8,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static com.constant.RegexConst.IPV6_MAPPED_V4;
+import static com.constant.RegexConst.RULE_SEP;
+import static java.util.regex.Pattern.matches;
 
 /**
  * IpConfig
@@ -19,8 +25,6 @@ import java.util.regex.Pattern;
  *  - assertValidRules(...) 로 사전 검증 가능
  */
 public final class IpConfig {
-    // 문자열을 분리하는 정규식 패턴
-    private static final Pattern SEP = Pattern.compile("(?:,|\\||\\R|;)+");
 
     private final String mergedRules;
     // allow-ip 파일 경로
@@ -35,17 +39,12 @@ public final class IpConfig {
         this.allowFile = allowFile;
     }
 
-    /**
-     *
-     * @param ipToValidate
-     * @param patternString
-     * @return
-     */
+
     private static boolean isValidIP(String ipToValidate, String patternString) {
         if (ipToValidate == null || ipToValidate.isBlank()) return false;
         if (patternString == null || patternString.isBlank()) return false;
 
-        String[] patterns = SEP.split(patternString);
+        String[] patterns = RULE_SEP.split(patternString);
         for (String raw : patterns) {
             String p = raw == null ? "" : raw.trim();
             if (p.isEmpty()) continue;
@@ -101,8 +100,8 @@ public final class IpConfig {
         if (parts.length != 2) return false;
         try {
             long startIp = ipv4ToLong(parts[0].trim());
-            long endIp   = ipv4ToLong(parts[1].trim());
-            long check   = ipv4ToLong(ip);
+            long endIp = ipv4ToLong(parts[1].trim());
+            long check = ipv4ToLong(ip);
             long lo = Math.min(startIp, endIp);
             long hi = Math.max(startIp, endIp);
             return check >= lo && check <= hi;
@@ -112,19 +111,25 @@ public final class IpConfig {
     }
 
     private static boolean isIpInWildcard(String ip, String wildcardPattern) {
-        // 예: 174.30.1.*  →  ^174\.30\.1\.\d{1,3}$
-        String regex = "^" + Pattern.quote(wildcardPattern)
-                .replace("\\*", "\\E\\\\d{1,3}\\Q") + "$";
-        return Pattern.compile(regex).matcher(ip).matches();
+        String regex = wildcardPattern.replace(".", "\\.");
+        regex = regex.replace("*", "\\d{1,3}");
+        regex = "^" + regex + "$";
+
+        if (!ip.matches(regex)) return false;
+
+        String[] parts = ip.split("\\.");
+        for (String part : parts) {
+            int val = Integer.parseInt(part);
+            if (val < 0 || val > 255) return false;
+        }
+        return true;
     }
+
 
     private static int ipv4ToInt(String ip) throws UnknownHostException {
         byte[] b = InetAddress.getByName(ip).getAddress();
         if (b.length != 4) throw new IllegalArgumentException("IPv4 only");
-        return ((b[0] & 0xFF) << 24)
-                | ((b[1] & 0xFF) << 16)
-                | ((b[2] & 0xFF) << 8)
-                |  (b[3] & 0xFF);
+        return ((b[0] & 0xFF) << 24) | ((b[1] & 0xFF) << 16) | ((b[2] & 0xFF) << 8) | (b[3] & 0xFF);
     }
 
     private static long ipv4ToLong(String ip) throws UnknownHostException {
@@ -132,12 +137,8 @@ public final class IpConfig {
     }
 
 
-    /** ENV와 파일을 읽어 최종 병합; 값이 없어도 예외 없이 동작 */
     public static IpConfig fromEnv() {
-        // 1) DEFAULT_IP (정규화된 문자열: ~ → -)
         String envRules = EnvConfig.defaultIpRules();
-
-        // 2) allow-ip 파일 로드(+정규화)
         String fileRules = EnvConfig.loadAllowFileRulesNormalized();
         Path usedFile = EnvConfig.actualAllowFilePath();
 
@@ -169,25 +170,20 @@ public final class IpConfig {
         }
     }
 
-    private static final Pattern IPV6_MAPPED_V4 =
-            Pattern.compile("^::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$", Pattern.CASE_INSENSITIVE);
+
 
     /** IPv6 문자열을 IPv4로 변환 가능한 경우 변환해서 반환. 변환 불가면 null. */
     public static String toIPv4IfPossible(String ip) {
         if (ip == null) return null;
         String s = ip.trim();
         if (s.isEmpty()) return null;
-
-        // 이미 IPv4
+        // IPv4인 경우
         if (!s.contains(":")) return s;
-
         // IPv6 루프백 → IPv4 루프백
         if ("::1".equals(s) || "0:0:0:0:0:0:0:1".equalsIgnoreCase(s)) return "127.0.0.1";
-
         // IPv6-mapped IPv4 (::ffff:a.b.c.d)
         Matcher m = IPV6_MAPPED_V4.matcher(s);
         if (m.matches()) return m.group(1);
-
         // 그 외 순수 IPv6은 변환 불가
         return null;
     }
@@ -195,30 +191,56 @@ public final class IpConfig {
     /**
      * 요청에서 클라이언트 IPv4를 추출.
      * trustProxyHeaders=true면 X-Forwarded-For / X-Real-IP를 우선 사용.
-     * (프록시가 없으면 false 권장)
      * @param req
      * @param trustProxyHeaders
      * @return
      */
     public static String clientIPv4(HttpServletRequest req, boolean trustProxyHeaders) {
-        String ip = null;
+        String ip = req.getRemoteAddr();
 
-        if (trustProxyHeaders) {
-            String xff = req.getHeader("X-Forwarded-For");
-            if (xff != null && !xff.isBlank()) {
-                // "client, proxy1, proxy2" 형태 → 첫 번째 토큰 사용
-                ip = xff.split(",")[0].trim();
-            } else {
-                String xri = req.getHeader("X-Real-IP");
-                if (xri != null && !xri.isBlank()) ip = xri.trim();
-            }
-        }
-
-        if (ip == null || ip.isBlank()) ip = req.getRemoteAddr();
-
+//        if (trustProxyHeaders) {
+//            String xff = req.getHeader("X-Forwarded-For");
+//            if (xff != null && !xff.isBlank()) {
+//                // "client, proxy1, proxy2" 형태 → 첫 번째 토큰 사용
+//                ip = xff.split(",")[0].trim();
+//            } else {
+//                String xri = req.getHeader("X-Real-IP");
+//                if (xri != null && !xri.isBlank()) ip = xri.trim();
+//            }
+//        }
         String v4 = toIPv4IfPossible(ip);
         return (v4 != null) ? v4 : ip;
     }
 
+    /**
+     * 단일 IP / CIDR / 범위 / 와일드카드 중 하나라도 맞으면 true.
+     * 일반 IPv6는 미지원(루프백 외).
+     */
+    private static boolean matches(String ip, String token) {
+        if (ip == null || token == null || token.isBlank()) return false;
+        // IPv6는 현재 미지원
+        if (ip.contains(":")) return false;
+        if (IPRegex.CIDR.matches(token)) return isIpInCidr(ip, token);
+        if (IPRegex.RANGE.matches(token)) return isIpInRange(ip, token);
+        if (IPRegex.WILDCARD.matches(token)) return isIpInWildcard(ip, token);
+        if (IPRegex.IPV4.matches(token)) return ip.equals(token);
+        return false;
+    }
 
+
+    /**
+     * 규칙 문자열(구분자 혼합 허용)을 토큰으로 나누고, IP에 첫 번째로 매칭되는 토큰을 반환.
+     * 매칭 없으면 null.
+     */
+    public static String findMatchedToken(String ip, String patternString) {
+        if (patternString == null || patternString.isBlank()) return null;
+        List<String> tokens = Arrays.stream(RULE_SEP.split(patternString))
+                .map(s -> s == null ? "" : s.trim())
+                .filter(s -> !s.isEmpty())
+                .toList();
+        for (String token : tokens) {
+            if (matches(ip, token)) return token; // 첫 매칭 토큰 반환
+        }
+        return null;
+    }
 }
